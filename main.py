@@ -114,41 +114,97 @@ def one_book(book_id):
 
     return jsonify(book=book)
 
+# def validate_book_data(dados, partial=False):
+#     # validações... crio uma função separada para ser reaproveitada pelas rotas onde isso é necessário.
 
 # POST  /books -> criar
 @app.route("/books",methods=["POST"])
 def create_book():
     dados = request.json # pegar o JSON que chegou do Bruno, já como dict python
     # return jsonify(dados)
-    new_book = Book( # lado esquerdo: é o atributo/parâmetro da classe Cafe; lado direito é o dado que veio do Bruno.
-        # Dados fornecidos pelo cliente:
-        title=dados.get("title"),
-        author=dados.get("author"), # # acesso as chaves via .get() x ["chave"] -> com .get() se chave não existir => None, não KeyError.
-        genre=dados.get("genre"),
-        year=dados.get("year"),
-        description=dados.get("description"),
-        rating=dados.get("rating"),
-        status=dados.get("status"),
-        # Dados determinados pelo servidor:
-        # owner_id=dados.get("owner_id")
-        )  # preencher tudo é chato mas é uma camada de segurança. Há atalhos, mas para junior isso é perfeitamente ok e esperado.
 
-    db.session.add(new_book)
-    db.session.commit()
+    # Antes de modificar o book, verifico se o cliente enviou todos os campos obrigatórios no Model:
+    if "title" in dados and "author" in dados and "genre" in dados:
+        new_book = Book( # lado esquerdo: é o atributo/parâmetro da classe Cafe; lado direito é o dado que veio do Bruno.
+            # Dados fornecidos pelo cliente:
+            title=dados.get("title"), # acesso as chaves via .get() x ["chave"] -> com .get() se chave não existir => None, não KeyError.
+            author=dados.get("author"),
+            genre=dados.get("genre"),
+            year=dados.get("year"),
+            description=dados.get("description"),
+            rating=dados.get("rating"),
+            status=dados.get("status"),
+            # Dados determinados pelo servidor:
+            # owner_id=dados.get("owner_id")
+            )
 
-    return jsonify(response={"success": "Book added successfully"}), 201
+        db.session.add(new_book)
+        db.session.commit()
 
+        return jsonify(response={"success": "Book added successfully"}), 201
 
-# PUT    /books/<id> -> substituir / editar
+    return jsonify(response={"error": "Title, author and genre are mandatory fields"}), 400
+
+# PUT    /books/<id> -> substituir / editar (ver se é o caso de manter)
 @app.route("/books/<int:book_id>",methods=["PUT"])
 def update_book(book_id):
-    pass
+    # Pego JSON que chegou do Bruno, já como dict python
+    dados = request.json
 
+    # Encontro no banco o book que tem esse id:
+    book = db.get_or_404(Book,book_id)
+
+    # Antes de modificar o book, verifico se o cliente enviou todos os campos obrigatórios no Model:
+    if "title" in dados and "author" in dados and "genre" in dados:
+        # Efetuo a modificação -> à esquerda, são os atributos do objeto Book que veio do banco, à direita, é o valor que o cliente enviou no JSON.
+        book.title = dados.get("title")
+        book.author = dados.get("author")
+        book.genre = dados.get("genre")
+        book.year = dados.get("year")
+        book.description = dados.get("description")
+        book.rating = dados.get("rating")
+        book.status = dados.get("status")
+
+        db.session.commit()
+
+        return jsonify(response={"success": "Book edited successfully"}), 200
+
+    return jsonify(response={"error": "Title, author and genre are mandatory fields"}), 400 # bad request
 
 # PATCH /books/<id> -> editar parcialmente
 @app.route("/books/<int:book_id>",methods=["PATCH"])
 def partially_update_book(book_id):
-    pass
+    # Pego JSON que chegou do Bruno, já como dict python
+    dados = request.json
+
+    # Encontro no banco o book que tem esse id:
+    book = db.get_or_404(Book, book_id)
+
+    # Atualizo somente os campos enviados pelo cliente:
+    if not dados:
+        return jsonify(response={"error": "No fields provided for update"}), 400
+
+    if "title" in dados: # "Se a chave existe, pegue o valor dela."
+        book.title = dados["title"]
+    if "author" in dados:
+        book.author = dados["author"]
+    if "genre" in dados:
+        book.genre = dados["genre"]
+    if "year" in dados:
+        book.year = dados["year"]
+    if "description" in dados:
+        book.description = dados["description"]
+    if "rating" in dados:
+        book.rating = dados["rating"]
+    if "status" in dados:
+        book.status = dados["status"]
+
+    db.session.commit()
+
+    return jsonify(response={"success": "Book edited successfully"}), 200
+
+# Depois, separadamente, podemos pensar na validação dos valores (year inteiro, rating válido etc.) e nos campos
+# proibidos (id, owner_id). Não precisa enfiar tudo dentro desse código agora. NAS ROTAS ADD PUT E PATCH.
 
 
 # DELETE /books/<id> -> apagar

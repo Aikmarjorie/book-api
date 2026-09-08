@@ -129,11 +129,34 @@ def logout():
 # BOOKS - CRUD SIMPLES:
 # GET    /books
 @app.route("/books")
-def all_books():
-    result = db.session.execute(db.select(Book)).scalars().all()
-    books = [book.to_dict() for book in result]
+def search_books(): # tentando juntar isso all books com o filtro by genre.
+    books_genre = request.args.get("genre") # GET /books?genre=fantasy -> "Que tipo de livro?"
+    books_status = request.args.get("status") # GET/books?status=read -> "Qual o status de leitura?"
 
+    if not books_genre and not books_status:
+        result = db.session.execute(db.select(Book)).scalars().all()
+        books = [book.to_dict() for book in result]
+        return jsonify(books=books)
+
+    query = db.select(Book)
+
+    if books_genre in ALLOWED_GENRES: # se o cara fez essa pesquisa por filtros, e o filtro existe na lista de generos permitidos:
+        query = query.where(Book.genre == books_genre)
+
+    if books_status in ALLOWED_STATUS:
+        query = query.where(Book.status == books_status)
+
+    result = db.session.execute(query).scalars().all()
+    books = [book.to_dict() for book in result]
     return jsonify(books=books)
+
+    # return jsonify(error={"Not Found": "Sorry, we don't have any book in this category."}), 404
+
+# /books
+#     ├── sem filtro → todos
+#     ├── ?genre=... → filtro por género
+#     └── ?status=... → filtro por estado
+
 
 # GET    /books/<id>
 @app.route("/books/<int:book_id>")
@@ -144,7 +167,7 @@ def one_book(book_id):
     return jsonify(book=book)
 
 # FUNCTION TO VALIDATE BOOK DATA:
-# Regras de validação para os campos do Book:
+# Regras de validação para os campos do Book: ela não foi feita para validar um género isolado. Ela foi feita para validar um dicionário de dados de Book.
 def validate_book_data(data):
     # Validação dos campos básicos, caso tenham sido enviados:
     for field in ["title", "author", "genre"]:
@@ -254,10 +277,9 @@ def delete_book(book_id):
     return jsonify(response={"success": "Book successfully deleted"}), 200
 
 
-# FILTROS:
-# GET /books?genre=fantasy -> "Que tipo de livro?"
-# GET /books?status=read -> "Qual é o estado da leitura?"
-
+@app.route("/books")
+def search_books_by_status():
+    pass
 
 if __name__ == '__main__':
     app.run(debug=True,port=5001)

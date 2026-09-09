@@ -133,30 +133,35 @@ def search_books(): # tentando juntar isso all books com o filtro by genre.
     books_genre = request.args.get("genre") # GET /books?genre=fantasy -> "Que tipo de livro?"
     books_status = request.args.get("status") # GET/books?status=read -> "Qual o status de leitura?"
 
-    if not books_genre and not books_status:
+    if not books_genre and not books_status: # se o cliente não enviar nem genre nem status: retorna todos os livros.
         result = db.session.execute(db.select(Book)).scalars().all()
         books = [book.to_dict() for book in result]
-        return jsonify(books=books)
-
+        return jsonify(books=books) # sem status explícito → Flask responde 200 OK por padrão.
+    # Senão: crio uma query base que inicialmente seleciona todos os Books,
+    # Os filtros serão adicionados abaixo somente quando o cliente realmente tiver enviado esses parâmetros.
     query = db.select(Book)
 
-    if books_genre in ALLOWED_GENRES: # se o cara fez essa pesquisa por filtros, e o filtro existe na lista de generos permitidos:
-        query = query.where(Book.genre == books_genre)
+    if books_genre: # Só entra aqui se o cliente tiver enviado um parâmetro "genre".
+        if books_genre not in ALLOWED_GENRES: # Enviou gênero mas não é um gênero válido?
+            return jsonify(error={"Bad request": "Sorry, genre not allowed."}), 400 # Nesse caso, a requisição é inválida e não precisamos consultar o banco.
+        else: # O gênero é válido, então adicionamos uma condição à query.
+            query = query.where(Book.genre == books_genre)
 
-    if books_status in ALLOWED_STATUS:
-        query = query.where(Book.status == books_status)
-
+    if books_status: # Só entra aqui se o cliente tiver enviado um parâmetro "status"
+        if books_status not in ALLOWED_STATUS: # O cliente enviou um status, mas esse valor não é permitido
+            return jsonify(error={"Bad request": "Sorry, status not allowed."}), 400 # Os if ... in ALLOWED_* realmente verificam se o valor é válido. O que eles não fazem automaticamente é retornar um erro quando é inválido.
+        else: # O status é válido, então adicionamos outra condição à query.
+            query = query.where(Book.status == books_status)
+    # Se genre também tiver sido enviado, teremos dois filtros.
+    # Só agora executamos a query que construímos acima:
     result = db.session.execute(query).scalars().all()
-    books = [book.to_dict() for book in result]
-    return jsonify(books=books)
+    books = [book.to_dict() for book in result] # Converte os objetos Book retornados pelo banco em dicionários
+                                                # antes de enviá-los na resposta JSON.
 
-    # return jsonify(error={"Not Found": "Sorry, we don't have any book in this category."}), 404
-
-# /books
-#     ├── sem filtro → todos
-#     ├── ?genre=... → filtro por género
-#     └── ?status=... → filtro por estado
-
+    return jsonify(books=books) # Retorna os livros encontrados.
+    # # Se a query não encontrar nenhum livro, "books" será uma lista vazia:
+    #     # {"books": []}
+    #     return jsonify(books=books)
 
 # GET    /books/<id>
 @app.route("/books/<int:book_id>")
@@ -276,10 +281,6 @@ def delete_book(book_id):
 
     return jsonify(response={"success": "Book successfully deleted"}), 200
 
-
-@app.route("/books")
-def search_books_by_status():
-    pass
 
 if __name__ == '__main__':
     app.run(debug=True,port=5001)

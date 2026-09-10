@@ -6,37 +6,9 @@ from sqlalchemy import Integer, String, Text, ForeignKey
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 from dotenv import load_dotenv
+from validators import ALLOWED_STATUS, ALLOWED_GENRES, ALLOWED_BOOK_FIELDS, validate_book_data, validate_user_data
 
 load_dotenv()
-
-# CONSTANTS:
-ALLOWED_STATUS = {
-    "Reading",
-    "Read",
-    "Unread"
-}
-
-ALLOWED_GENRES = {
-    "Fantasy",
-    "Science Fiction",
-    "Mystery",
-    "Thriller",
-    "Romance",
-    "Horror",
-    "Historical Fiction",
-    "Biography",
-    "Non-fiction",
-}
-
-ALLOWED_BOOK_FIELDS = {
-    "title",
-    "author",
-    "genre",
-    "year",
-    "description",
-    "rating",
-    "status"
-}
 
 app = Flask(__name__)
 
@@ -58,16 +30,16 @@ db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
 # CONFIGURE APP FLASK-LOGIN:
-# login_manager = LoginManager()
+login_manager = LoginManager()
 # login_manager.login_view = "login"
 # login_manager.login_message = "Please log in to continue."
-# login_manager.init_app(app)
+login_manager.init_app(app)
 
 # FLASK-LOGIN USER LOADER CALLBACK:
 # Flask-Login uses this function to reload the logged-in user from the database.
-# @login_manager.user_loader
-# def load_user(user_id):
-#     return  db.session.get(User, user_id)
+@login_manager.user_loader
+def load_user(user_id):
+    return  db.session.get(User, user_id)
 
 # CREATE MODELS
 class Book(db.Model):
@@ -103,28 +75,78 @@ class User(UserMixin,db.Model): # parent one user can have several books
 with app.app_context():
     db.create_all()
 
-# VALIDADE USER FUNCTION:
-def validate_user(user):
-    pass # regras para validação dos campos do user model
-
 # CREATE ROUTES / endpoints
 # AUTHENTICATION:
 # POST /auth/register
 @app.route("/auth/register",methods=["POST"])
 def register():
-    pass
+    user_data = request.json # recebe os dados do usuário
+
+    # Verifica se os campos obrigatórios existem:
+    if not "name" in user_data or not "email" in user_data or not "password" in user_data:
+        return jsonify(response={"error": "Name, email and password are mandatory fields"}), 400
+
+    # Verifica se eles são válidos:
+    if not validate_user_data(user_data):
+        return jsonify(response={"error": "Invalid user data"}), 400
+
+    result = db.session.execute(db.select(User).where(User.email == user_data["email"]))
+    user = result.scalar()
+
+    if user:
+        return jsonify(response={"error": "You've already signed up with that email, log in instead!"}), 409
+
+    hash_and_salted_password = generate_password_hash(
+        user_data["password"], # script e o padrao, sera que isso ta certo?
+        salt_length=8
+    )
+
+    new_user = User(
+        email=user_data["email"], # user_data["email"] não .get() porque ja verifico se os campos existem acima...
+        name=user_data["name"],
+        password=hash_and_salted_password,
+    )
+
+    db.session.add(new_user)
+    db.session.commit()
+
+    # This line will authenticate the user with Flask-Login
+    login_user(new_user) # usa a sessão/cookie do Flask-Login. Isso funciona, mas quando chegares à parte de autenticação da API, vamos precisar decidir como queres que o cliente mantenha a autenticação.
+
+    # Ao invés de enviar algo para o template, eu envio uma mensagem ao user:
+    return jsonify(response={"success": "User logged in successfully"}), 201
 
 
 # POST /auth/login
 @app.route("/auth/login",methods=["POST"])
 def login():
-    pass
+    user_data = request.json
 
+    # Verifica se os campos obrigatórios existem: já os validei acima aqui não preciso.
+    if not "email" in user_data or not "password" in user_data:
+        return jsonify(response={"error": "Email and password are mandatory fields"}), 400
+
+    result = db.session.execute(db.select(User).where(User.email == user_data["email"]))
+    user = result.scalar()
+
+    if not user:
+        return jsonify(response={"error": "Unauthorized: wrong email or password."}), 401
+
+    if not check_password_hash(user.password,user_data["password"]):
+        return jsonify(response={"error": "Password incorrect, try again."}), 401
+
+    login_user(user)
+    return jsonify(response={"success": "User logged in successfully"}), 200
+
+# Só guarda uma coisa para mais tarde: quando fores proteger os endpoints de Books, vais precisar
+# pensar no @login_required e no owner_id. Mas isso é o próximo assunto, não precisa entrar no login agora.
 
 # POST /auth/logout
 @app.route("/auth/logout",methods=["POST"])
+@login_required
 def logout():
-    pass
+    logout_user()
+    return jsonify({"success": "You've been logged out"}),200
 
 # BOOKS - CRUD SIMPLES:
 # GET    /books
@@ -171,43 +193,9 @@ def one_book(book_id):
 
     return jsonify(book=book)
 
-# FUNCTION TO VALIDATE BOOK DATA:
-# Regras de validação para os campos do Book: ela não foi feita para validar um género isolado. Ela foi feita para validar um dicionário de dados de Book.
-def validate_book_data(data):
-    # Validação dos campos básicos, caso tenham sido enviados:
-    for field in ["title", "author", "genre"]:
-        if field in data:
-            if not isinstance(data[field], str) or not data[field].strip():
-                return False
-    if "genre" in data:
-        if data["genre"] not in ALLOWED_GENRES:
-            return False
-
-    # Demais campos, verificação: foram enviados? Se sim -> São válidos?
-    if "year" in data:
-        if not isinstance(data["year"], int):
-            return False
-
-    if "description" in data:
-        if not isinstance(data["description"], str):
-            return False
-
-    if "rating" in data:
-        if not isinstance(data["rating"], int):
-            return False
-        if not 0 <= data["rating"] <= 5:
-            return False
-
-    if "status" in data:
-        if not isinstance(data["status"], str):
-            return False
-        if data["status"] not in ALLOWED_STATUS:
-            return False
-
-    return True
-
 # POST  /books -> criar
 @app.route("/books",methods=["POST"])
+@login_required
 def create_book():
     data = request.json # pegar o JSON que chegou do Bruno, já como dict python
     # return jsonify(dados)
@@ -245,6 +233,7 @@ def create_book():
 
 # PATCH /books/<id> -> editar parcialmente
 @app.route("/books/<int:book_id>",methods=["PATCH"])
+@login_required
 def partially_update_book(book_id): # JSON → verificar se existe → validar → procurar Book → alterar → commit
     # Pego JSON que chegou do Bruno, já como dict python
     data = request.json
@@ -271,6 +260,7 @@ def partially_update_book(book_id): # JSON → verificar se existe → validar �
 
 # DELETE /books/<id> -> apagar
 @app.route("/books/<int:book_id>",methods=["DELETE"])
+@login_required
 def delete_book(book_id):
     # Encontro o livro a ser deletado usando o book_id (primary key):
     book = db.get_or_404(Book,book_id) # o get_or_404 já trata se não existir o book.

@@ -54,7 +54,7 @@ class Book(db.Model):
     rating: Mapped[int] = mapped_column(Integer,nullable=True)
     status: Mapped[str] = mapped_column(String(250),nullable=True)
 
-    owner_id: Mapped[int] = mapped_column(ForeignKey("user_table.id"),nullable=False) # porque eu colocaria nullable=False aqui?
+    owner_id: Mapped[int] = mapped_column(ForeignKey("user_table.id"),nullable=False) # owner_id diz: "Esse Book pertence ao User cujo id é esse valor."
     owner: Mapped["User"] = relationship(back_populates="books") # book.owner => User -> qual o owner desse book?
 
     # Transformar o objeto Book num dicionário Python, porque o Flask precisa devolver uma resposta que possa ser representada como JSON.
@@ -138,9 +138,6 @@ def login():
     login_user(user)
     return jsonify(response={"success": "User logged in successfully"}), 200
 
-# Só guarda uma coisa para mais tarde: quando fores proteger os endpoints de Books, vais precisar
-# pensar no @login_required e no owner_id. Mas isso é o próximo assunto, não precisa entrar no login agora.
-
 # POST /auth/logout
 @app.route("/auth/logout",methods=["POST"])
 @login_required
@@ -151,17 +148,18 @@ def logout():
 # BOOKS - CRUD SIMPLES:
 # GET    /books
 @app.route("/books")
+@login_required
 def search_books(): # tentando juntar isso all books com o filtro by genre.
     books_genre = request.args.get("genre") # GET /books?genre=fantasy -> "Que tipo de livro?"
     books_status = request.args.get("status") # GET/books?status=read -> "Qual o status de leitura?"
 
     if not books_genre and not books_status: # se o cliente não enviar nem genre nem status: retorna todos os livros.
-        result = db.session.execute(db.select(Book)).scalars().all()
+        result = db.session.execute(db.select(Book).where(Book.owner_id == current_user.id)).scalars().all()
         books = [book.to_dict() for book in result]
         return jsonify(books=books) # sem status explícito → Flask responde 200 OK por padrão.
     # Senão: crio uma query base que inicialmente seleciona todos os Books,
     # Os filtros serão adicionados abaixo somente quando o cliente realmente tiver enviado esses parâmetros.
-    query = db.select(Book)
+    query = db.select(Book).where(Book.owner_id == current_user.id)
 
     if books_genre: # Só entra aqui se o cliente tiver enviado um parâmetro "genre".
         if books_genre not in ALLOWED_GENRES: # Enviou gênero mas não é um gênero válido?
@@ -176,7 +174,7 @@ def search_books(): # tentando juntar isso all books com o filtro by genre.
             query = query.where(Book.status == books_status)
     # Se genre também tiver sido enviado, teremos dois filtros.
     # Só agora executamos a query que construímos acima:
-    result = db.session.execute(query).scalars().all()
+    result = db.session.execute(query).scalars().all() # é aqui, na execução da query, que eu coloco scalars().all(), não antes, na query.
     books = [book.to_dict() for book in result] # Converte os objetos Book retornados pelo banco em dicionários
                                                 # antes de enviá-los na resposta JSON.
 
@@ -187,8 +185,15 @@ def search_books(): # tentando juntar isso all books com o filtro by genre.
 
 # GET    /books/<id>
 @app.route("/books/<int:book_id>")
+@login_required
 def one_book(book_id):
-    result = db.get_or_404(Book, book_id) # procuro pela primary key e o get_or_404 já trata o None
+    result = db.session.execute(db.select(Book).where(Book.id == book_id, Book.owner_id == current_user.id)).scalar_one_or_none()
+    if result is None:
+        return jsonify({"error": "Book not found"}), 404
+    # o livro não existe → None → 404;
+    # o livro existe, mas é de outro usuário → a query também retorna None → 404.
+    # E isso combina com a decisão que você acabou de tomar de não revelar a existência de livros de outros usuários.
+
     book = result.to_dict()
 
     return jsonify(book=book)
@@ -223,7 +228,7 @@ def create_book():
         status=data.get("status"),
 
         # Dados determinados pelo servidor:
-        # owner_id=dados.get("owner_id")
+        owner_id=current_user.id # O owner_id deste Book será o ID do usuário que está fazendo esta requisição.
         )
 
     db.session.add(new_book)
@@ -247,7 +252,10 @@ def partially_update_book(book_id): # JSON → verificar se existe → validar �
         return jsonify(response={"error": "Invalid book data"}), 400
 
     # Encontro no banco o Book que tem esse id:
-    book = db.get_or_404(Book, book_id)
+    book = db.session.execute(db.select(Book).where(Book.id == book_id,Book.owner_id == current_user.id)).scalar_one_or_none()
+
+    if book is None:
+        return jsonify({"error": "Book not found"}), 404
 
     # Atualizo somente os campos enviados pelo cliente:
     for field in ALLOWED_BOOK_FIELDS:
@@ -263,7 +271,10 @@ def partially_update_book(book_id): # JSON → verificar se existe → validar �
 @login_required
 def delete_book(book_id):
     # Encontro o livro a ser deletado usando o book_id (primary key):
-    book = db.get_or_404(Book,book_id) # o get_or_404 já trata se não existir o book.
+    book = db.session.execute(db.select(Book).where(Book.id == book_id, Book.owner_id == current_user.id)).scalar_one_or_none()
+
+    if book is None:
+        return jsonify({"error": "Book not found"}), 404
 
     # Digo ao banco: "quero que esse objeto seja removido da sessão":
     db.session.delete(book)

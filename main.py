@@ -18,7 +18,7 @@ class Base(DeclarativeBase):
 
 # CONNECT TO DATABASE
 # DB_URI can be changed through an environment variable for deployment.
-# SQLite is used locally by default.
+# SQLite is used locally by default -> "Use o valor de DB_URI se existir. Se não existir, use sqlite:///books.db."
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI","sqlite:///books.db")
 app.config['SECRET_KEY'] = os.environ["FLASK_KEY"] # Uma chave que fica dentro do servidor e que o Flask usa para proteger informações de segurança.
                                                    # SECRET_KEY = segredo interno usado pelo Flask para proteger mecanismos como sessões.
@@ -31,8 +31,6 @@ db.init_app(app)
 
 # CONFIGURE APP FLASK-LOGIN:
 login_manager = LoginManager()
-# login_manager.login_view = "login"
-# login_manager.login_message = "Please log in to continue."
 login_manager.init_app(app)
 
 # FLASK-LOGIN USER LOADER CALLBACK:
@@ -110,7 +108,7 @@ def register():
     db.session.add(new_user)
     db.session.commit()
 
-    # This line will authenticate the user with Flask-Login
+    # This line will authenticate the user with Flask-Login -> "Este utilizador acabou de se autenticar; considera-o logado."
     login_user(new_user) # usa a sessão/cookie do Flask-Login. Isso funciona, mas quando chegares à parte de autenticação da API, vamos precisar decidir como queres que o cliente mantenha a autenticação.
 
     # Ao invés de enviar algo para o template, eu envio uma mensagem ao user:
@@ -130,12 +128,12 @@ def login():
     user = result.scalar()
 
     if not user:
-        return jsonify(response={"error": "Unauthorized: wrong email or password."}), 401
+        return jsonify(response={"error": "Unauthorized: wrong email or password"}), 401
 
     if not check_password_hash(user.password,user_data["password"]):
-        return jsonify(response={"error": "Password incorrect, try again."}), 401
+        return jsonify(response={"error": "Password incorrect, try again"}), 401
 
-    login_user(user)
+    login_user(user) # "Este utilizador acabou de se autenticar; considera-o logado."
     return jsonify(response={"success": "User logged in successfully"}), 200
 
 # POST /auth/logout
@@ -163,7 +161,7 @@ def search_books(): # tentando juntar isso all books com o filtro by genre.
 
     if books_genre: # Só entra aqui se o cliente tiver enviado um parâmetro "genre".
         if books_genre not in ALLOWED_GENRES: # Enviou gênero mas não é um gênero válido?
-            return jsonify(error={"Bad request": "Sorry, genre not allowed."}), 400 # Nesse caso, a requisição é inválida e não precisamos consultar o banco.
+            return jsonify(error={"Bad request": "Sorry, genre not allowed"}), 400 # Nesse caso, a requisição é inválida e não precisamos consultar o banco.
         else: # O gênero é válido, então adicionamos uma condição à query.
             query = query.where(Book.genre == books_genre)
 
@@ -205,11 +203,17 @@ def create_book():
     data = request.json # pegar o JSON que chegou do Bruno, já como dict python
     # return jsonify(dados)
 
-    # Se qualquer um dos campos obrigatórios estiver faltando -> rejeitar.
+    # Rejeito campos desconhecidos: tem campos que a API não aceita?
+    if any(field not in ALLOWED_BOOK_FIELDS for field in data):
+        return jsonify(
+            response={"error": "One or more fields are not allowed"}
+        ), 400
+
+    # Se qualquer um dos campos obrigatórios estiver faltando -> rejeitar. faltam campos obrigatórios?
     if not "title" in data or not "author" in data or not "genre" in data:
         return jsonify(response={"error": "Title, author and genre are mandatory fields"}), 400
 
-    # Campo existe, porém, inválido:
+    # Campo existe, porém, inválido: valores são válidos?
     if not validate_book_data(data):
         return jsonify(response={"error": "Invalid book data"}), 400
 
@@ -228,7 +232,7 @@ def create_book():
         status=data.get("status"),
 
         # Dados determinados pelo servidor:
-        owner_id=current_user.id # O owner_id deste Book será o ID do usuário que está fazendo esta requisição.
+        owner_id=current_user.id, # O owner_id deste Book será o ID do usuário que está fazendo esta requisição.
         )
 
     db.session.add(new_book)
@@ -243,15 +247,21 @@ def partially_update_book(book_id): # JSON → verificar se existe → validar �
     # Pego JSON que chegou do Bruno, já como dict python
     data = request.json
 
-    # Verifico se foram enviados campos para atualização:
+    # Verifico se foram enviados campos para atualização: veio alguma coisa?
     if not data:
         return jsonify(response={"error": "No fields provided for update"}), 400
 
-    # Verifico os dados antes de alterar qualquer campo do livro:
+    # Rejeito campos desconhecidos: tem campos que a API não aceita? só vieram campos permitidos?
+    if any(field not in ALLOWED_BOOK_FIELDS for field in data):
+        return jsonify(
+            response={"error": "One or more fields cannot be updated"}
+        ), 400
+
+    # Verifico os dados antes de alterar qualquer campo do livro: os valores são válidos?
     if not validate_book_data(data):
         return jsonify(response={"error": "Invalid book data"}), 400
 
-    # Encontro no banco o Book que tem esse id:
+    # Encontro no banco o Book que tem esse id: o livro existe e pertence ao usuário?
     book = db.session.execute(db.select(Book).where(Book.id == book_id,Book.owner_id == current_user.id)).scalar_one_or_none()
 
     if book is None:

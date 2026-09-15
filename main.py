@@ -187,7 +187,7 @@ def search_books(): # tentando juntar isso all books com o filtro by genre.
 def one_book(book_id):
     result = db.session.execute(db.select(Book).where(Book.id == book_id, Book.owner_id == current_user.id)).scalar_one_or_none()
     if result is None:
-        return jsonify({"error": "Book not found"}), 404
+        return jsonify(response={"error": "Book not found"}), 404
     # o livro não existe → None → 404;
     # o livro existe, mas é de outro usuário → a query também retorna None → 404.
     # E isso combina com a decisão que você acabou de tomar de não revelar a existência de livros de outros usuários.
@@ -284,7 +284,7 @@ def delete_book(book_id):
     book = db.session.execute(db.select(Book).where(Book.id == book_id, Book.owner_id == current_user.id)).scalar_one_or_none()
 
     if book is None:
-        return jsonify({"error": "Book not found"}), 404
+        return jsonify(response={"error": "Book not found"}), 404
 
     # Digo ao banco: "quero que esse objeto seja removido da sessão":
     db.session.delete(book)

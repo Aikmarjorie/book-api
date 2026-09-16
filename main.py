@@ -127,13 +127,13 @@ def login():
     result = db.session.execute(db.select(User).where(User.email == user_data["email"]))
     user = result.scalar()
 
-    if not user:
-        return jsonify(response={"error": "Unauthorized: wrong email or password"}), 401
+    if not user: # email não existe
+        return jsonify(response={"error": "Unauthorized: wrong email or password"}), 401 # Isso é uma prática comum porque você não revela ao cliente se o email existe ou não.
 
-    if not check_password_hash(user.password,user_data["password"]):
+    if not check_password_hash(user.password,user_data["password"]): # email existe, senha errada
         return jsonify(response={"error": "Password incorrect, try again"}), 401
 
-    login_user(user) # "Este utilizador acabou de se autenticar; considera-o logado."
+    login_user(user) # email + senha corretos -> "este utilizador acabou de se autenticar; considera-o logado."
     return jsonify(response={"success": "User logged in successfully"}), 200
 
 # POST /auth/logout

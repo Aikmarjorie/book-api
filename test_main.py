@@ -29,8 +29,7 @@ def client_logged_in(): # fixture precisa entregar alguma coisa para o teste →
 def create_user(): # garante que existe a Paula no db de teste para poder fazer login. db.create_all() lá em cima permite que as tabelas existam, ambos são necessários.
     with app.app_context():
         hash_and_salted_password = generate_password_hash(
-            "paula123",  # script e o padrao, sera que isso ta certo?
-            salt_length=8
+            "paula123",
         )
 
         new_user = User(
@@ -78,7 +77,7 @@ def test_register_new_user():
         }
     )
 
-    assert response.status_code == 201 # ou 200? checar isso aqui e na main!
+    assert response.status_code == 201
     assert response.json["response"]["success"] == "User logged in successfully"
 #
 # # REGISTER WITH DUPLICATED DATA:

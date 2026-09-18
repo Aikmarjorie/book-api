@@ -41,7 +41,6 @@ def create_user():
 
         db.session.add(new_user)
         db.session.commit()
-        return new_user
 
 @pytest.fixture(autouse=True)
 def reset_database():
@@ -53,7 +52,7 @@ def reset_database():
 @pytest.fixture
 def create_book(client_logged_in):
     # Create a book for tests that require an existing book.
-    client.post(
+    client_logged_in.post(
         "/books",
         json={
             "title": "Dune",
@@ -83,7 +82,7 @@ def test_register_new_user():
 
 # Register with a duplicated email
 def test_register_new_user_with_registered_email(client_logged_in):
-    response = client.post(
+    response = client_logged_in.post(
         "/auth/register",
         json={
             "name": "Maria",
@@ -125,7 +124,7 @@ def test_login_with_nonexistent_email():
 # POST ENDPOINT
 # Create book with valid data
 def test_create_book_with_valid_data(client_logged_in):
-    response = client.post(
+    response = client_logged_in.post(
         "/books",
         json={
             "title": "Dune",
@@ -143,7 +142,7 @@ def test_create_book_with_valid_data(client_logged_in):
 
 # Create book with invalid data
 def test_create_book_with_invalid_data(client_logged_in):
-    response = client.post(
+    response = client_logged_in.post(
         "/books",
         json={
             "title": "Dune",
@@ -162,14 +161,14 @@ def test_create_book_with_invalid_data(client_logged_in):
 # GET ENDPOINTS
 # Get all books without filters
 def test_search_books(client_logged_in):
-    response = client.get(
+    response = client_logged_in.get(
         "/books",
     )
     assert response.status_code == 200
 
 # Get books with a genre filter
 def test_search_books_with_filter(client_logged_in):
-    response = client.get(
+    response = client_logged_in.get(
         "/books",
         query_string={
             "genre": "Fantasy"
@@ -187,7 +186,7 @@ def test_one_book(create_book): # o usuário precisa estar logado E o book preci
 
 # Get a non-existent book
 def test_one_book_not_found(client_logged_in):
-    response = client.get(
+    response = client_logged_in.get(
         "/books/999",
     )
     assert response.status_code == 404
@@ -241,7 +240,7 @@ def test_delete_book(create_book):
 
 # Delete a non-existent book
 def test_delete_unexistent_book(client_logged_in):
-    response = client.delete(
+    response = client_logged_in.delete(
         "/books/40"
     )
     assert response.status_code == 404

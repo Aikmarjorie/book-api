@@ -1,14 +1,10 @@
 import os
 import pytest
-from pytest import fixture
-from main import app, db, User, generate_password_hash
 
 # Use an in-memory SQLite database for testing.
 os.environ["DB_URI"] = "sqlite:///:memory:"
 
-# Create the database tables before running the tests.
-with app.app_context():
-    db.create_all()
+from main import app, db, User, generate_password_hash
 
 # Create a test client for sending requests to the application.
 client = app.test_client()
@@ -28,15 +24,16 @@ def client_logged_in():
 
 @pytest.fixture
 def create_user():
+    # Create a user for tests that require an existing user.
     with app.app_context():
-        hash_and_salted_password = generate_password_hash(
+        hashed_password = generate_password_hash(
             "paula123",
         )
 
         new_user = User(
             email="paula@test.com",
             name="Paula",
-            password=hash_and_salted_password,
+            password=hashed_password,
         )
 
         db.session.add(new_user)
@@ -99,7 +96,6 @@ def test_login_with_valid_data(create_user):
     response = client.post(
         "/auth/login",
         json={
-            "name": "Paula",
             "email": "paula@test.com",
             "password": "paula123"
         }
@@ -112,7 +108,6 @@ def test_login_with_nonexistent_email():
     response = client.post(
         "/auth/login",
         json={
-            "name": "Carlos",
             "email": "carlos@test.com",
             "password": "carlos456"
         }
@@ -167,18 +162,22 @@ def test_search_books(client_logged_in):
     assert response.status_code == 200
 
 # Get books with a genre filter
-def test_search_books_with_filter(client_logged_in):
-    response = client_logged_in.get(
+def test_search_books_with_filter(create_book):
+    response = client.get(
         "/books",
         query_string={
-            "genre": "Fantasy"
+            "genre": "Science Fiction"
         }
     )
 
     assert response.status_code == 200
+    assert len(response.json["books"]) == 1
+    assert response.json["books"][0]["genre"] == "Science Fiction"
 
 # Get an existing book
-def test_one_book(create_book): # o usuário precisa estar logado E o book precisa existir (a fixture create_book ja trata os 2 casos)
+def test_one_book(create_book):
+    # The user must be logged in and the book must exist.
+    # The create_book fixture handles both requirements.
     response = client.get(
         "/books/1",
     )
@@ -239,7 +238,7 @@ def test_delete_book(create_book):
     assert response.json["response"]["error"] == "Book not found"
 
 # Delete a non-existent book
-def test_delete_unexistent_book(client_logged_in):
+def test_delete_nonexistent_book(client_logged_in):
     response = client_logged_in.delete(
         "/books/40"
     )

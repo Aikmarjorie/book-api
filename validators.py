@@ -29,7 +29,7 @@ ALLOWED_BOOK_FIELDS = {
 
 # Validate the user data sent by the client.
 def validate_user_data(user):
-    for field in ["name","email","password"]:
+    for field in ["name", "email", "password"]:
         if not isinstance(user[field], str) or not user[field].strip():
             return False
 

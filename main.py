@@ -12,7 +12,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# CREATE DB
+# DEFINE SQLALCHEMY BASE
 class Base(DeclarativeBase):
     pass
 
@@ -92,20 +92,20 @@ def register():
     if user:
         return jsonify(response={"error": "You've already signed up with that email, log in instead!"}), 409
 
-    hash_and_salted_password = generate_password_hash(
+    hashed_password = generate_password_hash(
         user_data["password"]
     )
 
     new_user = User(
         email=user_data["email"],
         name=user_data["name"],
-        password=hash_and_salted_password,
+        password=hashed_password,
     )
 
     db.session.add(new_user)
     db.session.commit()
 
-    # This line will authenticate the user with Flask-Login and keep him logged in.
+    # Log the user in with Flask-Login.
     login_user(new_user)
 
     return jsonify(response={"success": "User logged in successfully"}), 201
@@ -128,7 +128,7 @@ def login():
         return jsonify(response={"error": "Unauthorized: wrong email or password"}), 401
 
     if not check_password_hash(user.password,user_data["password"]):
-        return jsonify(response={"error": "Password incorrect, try again"}), 401
+        return jsonify(response={"error": "Unauthorized: wrong email or password"}), 401
 
     login_user(user)
     return jsonify(response={"success": "User logged in successfully"}), 200

@@ -70,7 +70,7 @@ class User(UserMixin,db.Model):
 with app.app_context():
     db.create_all()
 
-# CREATE ROUTES / endpoints
+# ENDPOINTS
 # AUTHENTICATION:
 # POST /auth/register
 @app.route("/auth/register",methods=["POST"])
@@ -108,7 +108,7 @@ def register():
     # Log the user in with Flask-Login.
     login_user(new_user)
 
-    return jsonify(response={"success": "User logged in successfully"}), 201
+    return jsonify(response={"success": "User registered and logged in successfully"}), 201
 
 
 # POST /auth/login
@@ -281,4 +281,4 @@ def delete_book(book_id):
 
 
 if __name__ == '__main__':
-    app.run(debug=True,port=5001)
+    app.run(debug=False,port=5001)

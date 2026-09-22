@@ -75,7 +75,7 @@ def test_register_new_user():
     )
 
     assert response.status_code == 201
-    assert response.json["response"]["success"] == "User logged in successfully"
+    assert response.json["response"]["success"] == "User registered and logged in successfully"
 
 # Register with a duplicated email
 def test_register_new_user_with_registered_email(client_logged_in):

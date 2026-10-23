@@ -243,7 +243,7 @@ These are potential extensions rather than requirements for the current version.
 ### 1. Clone the repository
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Aikmarjorie/book-api.git
 cd book-api
 ```
 
